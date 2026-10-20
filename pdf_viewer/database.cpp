@@ -65,6 +65,37 @@ static int opened_book_callback(void* res_vector, int argc, char** argv, char** 
     return 0;
 }
 
+static int page_time_select_callback(void* res_vector, int argc, char** argv, char** col_name) {
+    std::vector<PageTimeEntry>* res = (std::vector<PageTimeEntry>*) res_vector;
+
+    if (argc != 4) {
+        std::cerr << "Error in file " << __FILE__ << " " << "Line: " << __LINE__ << std::endl;
+    }
+
+    PageTimeEntry entry;
+    entry.page_number = atoi(argv[0]);
+    entry.total_seconds = atof(argv[1]);
+    entry.visit_count = atoi(argv[2]);
+    entry.last_visit = argv[3] ? argv[3] : "";
+    res->push_back(entry);
+    return 0;
+}
+
+static int page_visits_select_callback(void* res_vector, int argc, char** argv, char** col_name) {
+    std::vector<PageVisitEntry>* res = (std::vector<PageVisitEntry>*) res_vector;
+
+    if (argc != 3) {
+        std::cerr << "Error in file " << __FILE__ << " " << "Line: " << __LINE__ << std::endl;
+    }
+
+    PageVisitEntry entry;
+    entry.page_number = atoi(argv[0]);
+    entry.enter_time = argv[1] ? argv[1] : "";
+    entry.duration_seconds = atof(argv[2]);
+    res->push_back(entry);
+    return 0;
+}
+
 
 static int prev_doc_callback(void* res_vector, int argc, char** argv, char** col_name) {
     std::vector<std::wstring>* res = (std::vector<std::wstring>*) res_vector;
@@ -747,6 +778,63 @@ bool DatabaseManager::update_book(const std::string& path, float zoom_level, flo
     int error_code = sqlite3_exec(global_db, utf8_encode(ss.str()).c_str(), null_callback, 0, &error_message);
     return handle_error(
         "update_book",
+        error_code,
+        error_message);
+}
+
+bool DatabaseManager::record_page_visit(const std::string& checksum, int page_number, float duration_seconds) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex);
+
+    std::wstringstream insert_ss;
+    insert_ss << "insert into page_visits(document_checksum, page_number, enter_time, duration_seconds) values ('" <<
+        esc(checksum) << "', " << page_number << ", datetime('now'), " << duration_seconds << ");";
+
+    char* insert_error_message = nullptr;
+    int insert_error_code = sqlite3_exec(global_db, utf8_encode(insert_ss.str()).c_str(), null_callback, 0, &insert_error_message);
+    if (!handle_error("record_page_visit:insert", insert_error_code, insert_error_message)) {
+        return false;
+    }
+
+    std::wstringstream upsert_ss;
+    upsert_ss << "insert into page_time(document_checksum, page_number, total_seconds, visit_count, last_visit) values ('" <<
+        esc(checksum) << "', " << page_number << ", " << duration_seconds << ", 1, datetime('now')) " <<
+        "on conflict(document_checksum, page_number) do update set " <<
+        "total_seconds = total_seconds + excluded.total_seconds, " <<
+        "visit_count = visit_count + 1, " <<
+        "last_visit = excluded.last_visit;";
+
+    char* upsert_error_message = nullptr;
+    int upsert_error_code = sqlite3_exec(global_db, utf8_encode(upsert_ss.str()).c_str(), null_callback, 0, &upsert_error_message);
+    return handle_error(
+        "record_page_visit:upsert",
+        upsert_error_code,
+        upsert_error_message);
+}
+
+bool DatabaseManager::select_page_time(const std::string& checksum, std::vector<PageTimeEntry>& out_result) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex);
+    std::wstringstream ss;
+    ss << "select page_number, total_seconds, visit_count, last_visit from page_time where document_checksum='" <<
+        esc(checksum) << "' order by page_number;";
+
+    char* error_message = nullptr;
+    int error_code = sqlite3_exec(global_db, utf8_encode(ss.str()).c_str(), page_time_select_callback, &out_result, &error_message);
+    return handle_error(
+        "select_page_time",
+        error_code,
+        error_message);
+}
+
+bool DatabaseManager::select_page_visits(const std::string& checksum, std::vector<PageVisitEntry>& out_result, int limit) {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex);
+    std::wstringstream ss;
+    ss << "select page_number, enter_time, duration_seconds from page_visits where document_checksum='" <<
+        esc(checksum) << "' order by id desc limit " << limit << ";";
+
+    char* error_message = nullptr;
+    int error_code = sqlite3_exec(global_db, utf8_encode(ss.str()).c_str(), page_visits_select_callback, &out_result, &error_message);
+    return handle_error(
+        "select_page_visits",
         error_code,
         error_message);
 }

@@ -45,6 +45,9 @@ public:
         std::optional<float> zoom_level = {});
     bool update_mark(const std::string& checksum, char symbol, float offset_y, std::optional<float> offset_x, std::optional<float> zoom_level);
     bool update_book(const std::string& path, float zoom_level, float offset_x, float offset_y, std::wstring actual_name=L"");
+    bool record_page_visit(const std::string& checksum, int page_number, float duration_seconds);
+    bool select_page_time(const std::string& checksum, std::vector<PageTimeEntry>& out_result);
+    bool select_page_visits(const std::string& checksum, std::vector<PageVisitEntry>& out_result, int limit = 1000);
     bool select_mark(const std::string& checksum, std::vector<Mark>& out_result);
     bool insert_bookmark(const std::string& checksum, const std::wstring& desc, float offset_y, std::wstring uuid);
     bool insert_bookmark_marked(const std::string& checksum, const std::wstring& desc, float offset_x, float offset_y, std::wstring uuid);
