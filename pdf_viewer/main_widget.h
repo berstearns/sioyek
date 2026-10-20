@@ -294,6 +294,11 @@ public:
     QTimer* validation_interval_timer = nullptr;
     QDateTime last_persistance_datetime;
 
+    // reading-time tracking: the page whose visit is currently being timed and
+    // when that visit began; flushed to the db on page change and on persist()
+    int tracked_page = -1;
+    QDateTime tracked_page_since;
+
     std::deque<ClickSpaceTime> recent_clicks;
 
     // the portal to be edited. This is usually set by `edit_portal` command which jumps to the portal
@@ -435,6 +440,8 @@ public:
     void handle_search_paper_name(std::wstring paper_name, bool is_shift_pressed);
 
     void persist(bool persist_drawings = false);
+    void track_reading_time();
+    void flush_tracked_page_visit();
     bool is_pending_link_source_filled();
     std::wstring get_status_string(bool is_right);
     void handle_escape();

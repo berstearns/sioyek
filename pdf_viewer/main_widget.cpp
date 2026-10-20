@@ -853,6 +853,7 @@ void MainWidget::update_text_selection(AbsoluteDocumentPos abs_mpos) {
 }
 
 void MainWidget::persist(bool persist_drawings) {
+    flush_tracked_page_visit();
     main_document_view->persist(persist_drawings);
 
     if (RESTORE_ALL_WINDOWS_ON_STARTUP) {
@@ -883,6 +884,46 @@ void MainWidget::persist(bool persist_drawings) {
             last_path_file << encoded_file_name_str.c_str() << std::endl;
             last_path_file.close();
         }
+    }
+}
+
+void MainWidget::flush_tracked_page_visit() {
+    if (tracked_page < 0) {
+        return;
+    }
+    if (doc()) {
+        float elapsed_seconds = tracked_page_since.msecsTo(QDateTime::currentDateTime()) / 1000.0f;
+        // a single visit is capped: longer stretches mean the document was
+        // left open unattended, not actively read
+        if (elapsed_seconds > 300.0f) {
+            elapsed_seconds = 300.0f;
+        }
+        if (elapsed_seconds > 0.0f) {
+            db_manager->record_page_visit(doc()->get_checksum(), tracked_page, elapsed_seconds);
+        }
+    }
+    tracked_page = -1;
+}
+
+void MainWidget::track_reading_time() {
+    if (!doc()) {
+        tracked_page = -1;
+        return;
+    }
+    if (!isActiveWindow()) {
+        // only accumulate while the window is focused; flush so that idle
+        // unfocused time is not counted when the window regains focus
+        flush_tracked_page_visit();
+        return;
+    }
+    int current_page = main_document_view->get_center_page_number();
+    if (current_page < 0) {
+        return;
+    }
+    if (tracked_page != current_page) {
+        flush_tracked_page_visit();
+        tracked_page = current_page;
+        tracked_page_since = QDateTime::currentDateTime();
     }
 }
 void MainWidget::closeEvent(QCloseEvent* close_event) {
@@ -1232,6 +1273,7 @@ MainWidget::MainWidget(fz_context* mupdf_context,
         }
 
         cleanup_expired_pending_portals();
+        track_reading_time();
         if (TOUCH_MODE && selection_begin_indicator) {
             selection_begin_indicator->update_pos();
             selection_end_indicator->update_pos();
