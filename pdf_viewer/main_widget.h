@@ -442,6 +442,7 @@ public:
     void persist(bool persist_drawings = false);
     void track_reading_time();
     void flush_tracked_page_visit();
+    void show_reading_stats();
     bool is_pending_link_source_filled();
     std::wstring get_status_string(bool is_right);
     void handle_escape();

@@ -3488,6 +3488,16 @@ public:
     }
 };
 
+class ReadingStatsCommand : public Command {
+public:
+    static inline const std::string cname = "reading_stats";
+    static inline const std::string hname = "Show per-page reading time statistics and export them to a CSV file";
+    ReadingStatsCommand(MainWidget* w) : Command(cname, w) {};
+    void perform() {
+        widget->show_reading_stats();
+    }
+};
+
 class ZoomOutCommand : public Command {
 public:
     static inline const std::string cname = "zoom_out";
@@ -7274,6 +7284,7 @@ CommandManager::CommandManager(ConfigManager* config_manager) {
     register_command<FitToPageWidthSmartCommand>();
     register_command<NextPageCommand>();
     register_command<PreviousPageCommand>();
+    register_command<ReadingStatsCommand>();
     register_command<OpenDocumentCommand>();
     register_command<OpenDocumentInDirectoryCommand>();
     register_command<ScreenshotCommand>();

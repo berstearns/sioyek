@@ -170,6 +170,7 @@ extern std::wstring ALT_RIGHT_CLICK_COMMAND;
 extern Path local_database_file_path;
 extern Path global_database_file_path;
 extern Path downloaded_papers_path;
+extern Path standard_data_path;
 extern std::map<std::wstring, std::wstring> ADDITIONAL_COMMANDS;
 extern std::map<std::wstring, std::wstring> ADDITIONAL_MACROS;
 extern bool HIGHLIGHT_MIDDLE_CLICK;
@@ -926,6 +927,61 @@ void MainWidget::track_reading_time() {
         tracked_page_since = QDateTime::currentDateTime();
     }
 }
+
+void MainWidget::show_reading_stats() {
+    if (!doc()) {
+        set_status_message(L"No document is open");
+        return;
+    }
+
+    std::string checksum = doc()->get_checksum();
+    std::vector<PageTimeEntry> page_times;
+    std::vector<PageVisitEntry> page_visits;
+    db_manager->select_page_time(checksum, page_times);
+    db_manager->select_page_visits(checksum, page_visits);
+
+    float total_seconds = 0;
+    int furthest_page = -1;
+    for (const PageTimeEntry& entry : page_times) {
+        total_seconds += entry.total_seconds;
+        furthest_page = std::max(furthest_page, entry.page_number);
+    }
+
+    std::wstring sanitized_name = Path(doc()->get_path()).filename().value_or(L"document");
+    for (wchar_t& c : sanitized_name) {
+        bool is_allowed = (c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') ||
+            (c >= L'0' && c <= L'9') || c == L'-' || c == L'_' || c == L'.';
+        if (!is_allowed) {
+            c = L'_';
+        }
+    }
+    Path csv_path = standard_data_path.slash(L"reading_stats_" + sanitized_name + L".csv");
+    std::ofstream csv_file(csv_path.get_path_utf8());
+    csv_file << "page_number,total_seconds,visit_count,last_visit\n";
+    for (const PageTimeEntry& entry : page_times) {
+        csv_file << entry.page_number << "," << entry.total_seconds << "," <<
+            entry.visit_count << "," << entry.last_visit << "\n";
+    }
+    csv_file << "\nenter_time,page_number,duration_seconds\n";
+    // page_visits comes back newest-first; the CSV timeline is chronological
+    for (auto it = page_visits.rbegin(); it != page_visits.rend(); ++it) {
+        csv_file << it->enter_time << "," << it->page_number << "," << it->duration_seconds << "\n";
+    }
+    csv_file.close();
+
+    int total_minutes = (int)(total_seconds / 60);
+    int remaining_seconds = ((int)total_seconds) % 60;
+    std::wstringstream status_ss;
+    status_ss << L"visited " << page_times.size() << L"/" << doc()->num_pages() <<
+        L" pages, total " << total_minutes << L"m" << remaining_seconds << L"s";
+    if (furthest_page >= 0) {
+        // page numbers are 0-based internally; display them 1-based
+        status_ss << L", furthest page " << (furthest_page + 1);
+    }
+    status_ss << L" | csv: " << csv_path.get_path();
+    set_status_message(status_ss.str());
+}
+
 void MainWidget::closeEvent(QCloseEvent* close_event) {
     handle_close_event();
 }
