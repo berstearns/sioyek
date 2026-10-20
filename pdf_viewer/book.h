@@ -52,6 +52,19 @@ struct OpenedBookState {
     int line_index = -1;
 };
 
+struct PageTimeEntry {
+    int page_number;
+    float total_seconds;
+    int visit_count;
+    std::string last_visit;
+};
+
+struct PageVisitEntry {
+    int page_number;
+    std::string enter_time;
+    float duration_seconds;
+};
+
 struct Annotation {
     std::string creation_time;
     std::string modification_time;

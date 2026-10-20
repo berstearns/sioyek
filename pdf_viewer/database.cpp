@@ -569,6 +569,42 @@ bool DatabaseManager::create_marks_table() {
         error_message);
 }
 
+bool DatabaseManager::create_page_visits_table() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex);
+    const char* create_page_visits_sql = "CREATE TABLE IF NOT EXISTS page_visits ("\
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"\
+        "document_checksum TEXT,"\
+        "page_number INTEGER,"\
+        "enter_time TEXT,"\
+        "duration_seconds REAL);";
+
+    char* error_message = nullptr;
+    int error_code = sqlite3_exec(global_db, create_page_visits_sql, null_callback, 0, &error_message);
+    return handle_error(
+        "create_page_visits_table",
+        error_code,
+        error_message);
+}
+
+bool DatabaseManager::create_page_time_table() {
+    std::lock_guard<std::recursive_mutex> lock(db_mutex);
+    const char* create_page_time_sql = "CREATE TABLE IF NOT EXISTS page_time ("\
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"\
+        "document_checksum TEXT,"\
+        "page_number INTEGER,"\
+        "total_seconds REAL DEFAULT 0,"\
+        "visit_count INTEGER DEFAULT 0,"\
+        "last_visit TEXT,"\
+        "UNIQUE(document_checksum, page_number));";
+
+    char* error_message = nullptr;
+    int error_code = sqlite3_exec(global_db, create_page_time_sql, null_callback, 0, &error_message);
+    return handle_error(
+        "create_page_time_table",
+        error_code,
+        error_message);
+}
+
 bool DatabaseManager::create_bookmarks_table() {
     std::lock_guard<std::recursive_mutex> lock(db_mutex);
     const char* create_bookmarks_sql = "CREATE TABLE IF NOT EXISTS bookmarks ("\
@@ -1258,6 +1294,8 @@ void DatabaseManager::create_tables() {
     create_bookmarks_table();
     create_highlights_table();
     create_links_table();
+    create_page_visits_table();
+    create_page_time_table();
     create_document_hash_table();
 }
 

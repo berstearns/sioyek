@@ -29,6 +29,8 @@ private:
     bool create_marks_table();
     bool create_bookmarks_table();
     bool create_links_table();
+    bool create_page_visits_table();
+    bool create_page_time_table();
     void create_tables();
     bool create_document_hash_table();
     bool create_highlights_table();
