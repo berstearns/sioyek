@@ -13,7 +13,15 @@
 #                                    `git add -- <path...>` then commit with
 #                                    -m subject -m body; body is mandatory so
 #                                    every commit carries its rationale
-# OUTPUTS: mutates git state (branch creation, commits); prints the command it
+#            publish <remote> <upstream-owner/repo> <branch...>
+#                                    fork <upstream-owner/repo> on GitHub into
+#                                    the authenticated gh account (idempotent,
+#                                    --clone=false), point <remote> at the fork,
+#                                    and `git push -u <remote>` each <branch>;
+#                                    fork network shares objects so only new
+#                                    commits are uploaded
+# OUTPUTS: mutates git state (branch creation, commits, remotes, pushes) and
+#          GitHub state (fork creation on `publish`); prints the commands it
 #          runs and the resulting `git log -1 --stat`; exit 0 = ok,
 #          1 = git failure, 2 = dirty tracked tree on `start`, 64 = usage error.
 # USAGE (combinatorial):
@@ -29,9 +37,14 @@
 #       # INVALID: empty body rejected, exits 64
 #   ./scripts/AUTO-git-feature.sh frobnicate
 #       # INVALID: unknown subcommand, exits 64
+#   ./scripts/AUTO-git-feature.sh publish mine ahrm/sioyek development feature/reading-time-tracking
+#       # fork ahrm/sioyek to your account if needed, add remote `mine`, push both branches
 # RE-RUN SAFETY: `start` fails (non-destructively) if the branch already exists;
 #          `commit` is naturally one-shot — a second run with the same paths
-#          fails with "nothing to commit". No destructive git ops are used.
+#          fails with "nothing to commit"; `publish` is idempotent — gh repo
+#          fork reuses an existing fork, an existing remote is kept (its URL is
+#          verified against the fork), pushed branches just fast-forward.
+#          No destructive git ops are used.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
@@ -60,7 +73,32 @@ case "$SUB" in
         git commit -m "$SUBJECT" -m "$BODY"
         git log -1 --stat
         ;;
+    publish)
+        [ $# -ge 3 ] || { echo "usage: $0 publish <remote> <upstream-owner/repo> <branch...>" >&2; exit 64; }
+        REMOTE="$1"; UPSTREAM="$2"; shift 2
+        GH_USER="$(gh api user --jq .login)"
+        FORK="$GH_USER/$(basename "$UPSTREAM")"
+        FORK_URL="https://github.com/$FORK.git"
+        if ! gh repo view "$FORK" >/dev/null 2>&1; then
+            echo "+ gh repo fork $UPSTREAM --clone=false"
+            gh repo fork "$UPSTREAM" --clone=false
+        else
+            echo "fork $FORK already exists; reusing"
+        fi
+        if git remote get-url "$REMOTE" >/dev/null 2>&1; then
+            EXISTING="$(git remote get-url "$REMOTE")"
+            [ "$EXISTING" = "$FORK_URL" ] || { echo "error: remote '$REMOTE' exists with unexpected URL $EXISTING (want $FORK_URL)" >&2; exit 1; }
+            echo "remote '$REMOTE' already points at $FORK_URL"
+        else
+            echo "+ git remote add $REMOTE $FORK_URL"
+            git remote add "$REMOTE" "$FORK_URL"
+        fi
+        for BRANCH in "$@"; do
+            echo "+ git push -u $REMOTE $BRANCH"
+            git push -u "$REMOTE" "$BRANCH"
+        done
+        ;;
     *)
-        echo "usage error: unknown subcommand '$SUB' (want start|commit)" >&2
+        echo "usage error: unknown subcommand '$SUB' (want start|commit|publish)" >&2
         exit 64 ;;
 esac
